@@ -1,30 +1,14 @@
-// Copyright 2024 openGemini Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package opengemini
 
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/libgox/gocollections/syncx"
 )
 
 type endpoint struct {
@@ -37,30 +21,27 @@ type client struct {
 	endpoints   []endpoint
 	cli         *http.Client
 	prevIdx     atomic.Int32
-	dataChanMap syncx.Map[dbRp, chan *sendBatchWithCB]
+	dataChanMap sync.Map
 	metrics     *metrics
-	rpcClient   *writerClient
 
 	batchContext       context.Context
 	batchContextCancel context.CancelFunc
-
-	logger *slog.Logger
 }
 
 func newClient(c *Config) (Client, error) {
 	if len(c.Addresses) == 0 {
-		return nil, ErrNoAddress
+		return nil, errors.New("must have at least one address")
 	}
 	if c.AuthConfig != nil {
 		if c.AuthConfig.AuthType == AuthTypeToken && len(c.AuthConfig.Token) == 0 {
-			return nil, ErrEmptyAuthToken
+			return nil, errors.New("invalid auth config due to empty token")
 		}
 		if c.AuthConfig.AuthType == AuthTypePassword {
 			if len(c.AuthConfig.Username) == 0 {
-				return nil, ErrEmptyAuthUsername
+				return nil, errors.New("invalid auth config due to empty username")
 			}
 			if len(c.AuthConfig.Password) == 0 {
-				return nil, ErrEmptyAuthPassword
+				return nil, errors.New("invalid auth config due to empty password")
 			}
 		}
 	}
@@ -81,47 +62,31 @@ func newClient(c *Config) (Client, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	dbClient := &client{
 		config:             c,
-		endpoints:          buildEndpoints(c.Addresses, c.TlsConfig != nil),
+		endpoints:          buildEndpoints(c.Addresses, c.TlsEnabled),
 		cli:                newHttpClient(*c),
 		metrics:            newMetricsProvider(c.CustomMetricsLabels),
 		batchContext:       ctx,
 		batchContextCancel: cancel,
 	}
-	if c.Logger != nil {
-		dbClient.logger = c.Logger
-	} else {
-		dbClient.logger = slog.Default()
-	}
-	if c.GrpcConfig != nil {
-		rc, err := newWriterClient(c.GrpcConfig)
-		if err != nil {
-			return nil, errors.New("failed to create rpc client: " + err.Error())
-		}
-		dbClient.rpcClient = rc
-	}
 	dbClient.prevIdx.Store(-1)
-	if len(c.Addresses) > 1 {
-		// if there are multiple addresses, start the health check
-		go dbClient.endpointsCheck(ctx)
-	}
+	go dbClient.endpointsCheck(ctx)
 	return dbClient, nil
 }
 
 func (c *client) Close() error {
 	c.batchContextCancel()
-	c.dataChanMap.Range(func(key dbRp, cb chan *sendBatchWithCB) bool {
-		close(cb)
+	c.dataChanMap.Range(func(key, value interface{}) bool {
+		cb, ok := value.(chan *sendBatchWithCB)
+		if ok {
+			close(cb)
+		}
 		c.dataChanMap.Delete(key)
 		return true
 	})
-	if c.rpcClient != nil {
-		_ = c.rpcClient.Close()
-	}
-	c.cli.CloseIdleConnections()
 	return nil
 }
 
-func buildEndpoints(addresses []Address, tlsEnabled bool) []endpoint {
+func buildEndpoints(addresses []*Address, tlsEnabled bool) []endpoint {
 	urls := make([]endpoint, len(addresses))
 	protocol := "http://"
 	if tlsEnabled {

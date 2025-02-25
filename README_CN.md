@@ -1,12 +1,8 @@
 # opengemini-client-go
 
-![License](https://img.shields.io/badge/开源许可证-Apache2.0-green)
-![Language](https://img.shields.io/badge/语言-Go-blue.svg)
-[![version](https://img.shields.io/github/v/tag/opengemini/opengemini-client-go?label=发行版本&color=blue)](https://github.com/opengemini/opengemini-client-go/releases)
-[![Go report](https://goreportcard.com/badge/github.com/opengemini/opengemini-client-go)](https://goreportcard.com/report/github.com/opengemini/opengemini-client-go)
-[![Godoc](http://img.shields.io/badge/文档-go.dev-blue.svg?style=flat-square)](https://pkg.go.dev/github.com/openGemini/opengemini-client-go)
+![License](https://img.shields.io/badge/开源许可证-Apache2.0-green) ![Language](https://img.shields.io/badge/语言-Go-blue.svg) [![version](https://img.shields.io/github/v/tag/opengemini/opengemini-client-go?label=发行版本&color=blue)](https://github.com/opengemini/opengemini-client-go/releases) [![Godoc](http://img.shields.io/badge/文档-go.dev-blue.svg?style=flat-square)](https://pkg.go.dev/github.com/openGemini/opengemini-client-go)
 
-[English](README.md) | 简体中文
+[English](README.md) | 简体中文 
 
 `opengemini-client-go` 是一个用 Go 语言编写的 OpenGemini 客户端
 
@@ -24,21 +20,17 @@ OpenGemini 是一款云原生分布式时序数据库。获取更多信息，请
 
 ## 用法
 
-安装客户端库:
-
-```
-go get github.com/openGemini/opengemini-client-go
-```
-
 引入客户端库：
 
-```go
-import "github.com/openGemini/opengemini-client-go/opengemini"
+```
+go get github.com/openGemini/opengemini-client-go/opengemini
 ```
 
 创建客户端：
 
 ```go
+import "github.com/openGemini/opengemini-client-go/opengemini"
+
 config := &opengemini.Config{
 	Addresses: []*opengemini.Address{
 		{

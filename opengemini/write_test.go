@@ -1,34 +1,12 @@
-// Copyright 2024 openGemini Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package opengemini
 
 import (
 	"context"
+	"fmt"
+	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
-
-func TestClientWriteEmptyBatchPoints(t *testing.T) {
-	c := testDefaultClient(t)
-
-	err := c.WriteBatchPoints(context.Background(), "database", make([]*Point, 0))
-	require.NoError(t, err)
-}
 
 func TestClientWriteBatchPoints(t *testing.T) {
 	c := testDefaultClient(t)
@@ -213,8 +191,8 @@ func TestClientWritePointWithRetentionPolicy(t *testing.T) {
 		Command:         "select * from " + point.Measurement,
 		RetentionPolicy: "testRp",
 	})
-	assert.Nil(t, err)
 	assert.NotNil(t, res.Results[0].Series[0].Values)
+	assert.Nil(t, err)
 }
 
 func TestWriteAssignedIntegerField(t *testing.T) {
@@ -245,16 +223,18 @@ func TestWriteAssignedIntegerField(t *testing.T) {
 	time.Sleep(time.Second * 5)
 
 	// check field's data type
-	res, err := c.ShowFieldKeys(database, measurement)
+	res, err := c.ShowFieldKeys(database, fmt.Sprintf("SHOW FIELD KEYS FROM %s", measurement))
 	assert.Nil(t, err)
-	fields, ok := res[measurement]
-	assert.True(t, ok)
-	assert.EqualValues(t, "integer", fields["field"])
+	if value, ok := res[0].Values[0].(keyValue); !ok {
+		t.Fail()
+	} else {
+		assert.Equal(t, "integer", value.Value)
+	}
 }
 
 func TestWriteWithBatchInterval(t *testing.T) {
 	c := testNewClient(t, &Config{
-		Addresses: []Address{{
+		Addresses: []*Address{{
 			Host: "127.0.0.1",
 			Port: 8086,
 		}},
@@ -301,7 +281,7 @@ END:
 
 func TestWriteWithBatchSize(t *testing.T) {
 	c := testNewClient(t, &Config{
-		Addresses: []Address{{
+		Addresses: []*Address{{
 			Host: "127.0.0.1",
 			Port: 8086,
 		}},

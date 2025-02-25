@@ -1,17 +1,3 @@
-// Copyright 2024 openGemini Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package opengemini
 
 import (
@@ -121,11 +107,9 @@ func NewRetentionPolicy(value SeriesValue) *RetentionPolicy {
 
 // CreateRetentionPolicy Create retention policy
 func (c *client) CreateRetentionPolicy(database string, rpConfig RpConfig, isDefault bool) error {
-	err := checkDatabaseAndPolicy(database, rpConfig.Name)
-	if err != nil {
-		return err
+	if len(database) == 0 {
+		return errors.New("empty database name")
 	}
-
 	var buf strings.Builder
 	buf.WriteString(fmt.Sprintf("CREATE RETENTION POLICY %s ON \"%s\" DURATION %s REPLICATION 1", rpConfig.Name, database, rpConfig.Duration))
 	if len(rpConfig.ShardGroupDuration) > 0 {
@@ -151,51 +135,15 @@ func (c *client) CreateRetentionPolicy(database string, rpConfig RpConfig, isDef
 	return nil
 }
 
-func (c *client) UpdateRetentionPolicy(database string, rpConfig RpConfig, isDefault bool) error {
-	err := checkDatabaseAndPolicy(database, rpConfig.Name)
-	if err != nil {
-		return err
-	}
-
-	var buf strings.Builder
-	buf.WriteString(fmt.Sprintf("ALTER RETENTION POLICY %s ON \"%s\" ", rpConfig.Name, database))
-	if len(rpConfig.Duration) > 0 {
-		buf.WriteString(fmt.Sprintf(" DURATION %s", rpConfig.Duration))
-	}
-	if len(rpConfig.IndexDuration) > 0 {
-		buf.WriteString(fmt.Sprintf(" INDEX DURATION %s", rpConfig.IndexDuration))
-	}
-	if len(rpConfig.ShardGroupDuration) > 0 {
-		buf.WriteString(fmt.Sprintf(" SHARD DURATION %s", rpConfig.ShardGroupDuration))
-	}
-	if isDefault {
-		buf.WriteString(" DEFAULT")
-	}
-
-	queryResult, err := c.queryPost(Query{Command: buf.String()})
-	if err != nil {
-		return err
-	}
-
-	err = queryResult.hasError()
-	if err != nil {
-		return fmt.Errorf("update retention policy %w", err)
-	}
-
-	return nil
-}
-
 // ShowRetentionPolicies Show retention policy
 func (c *client) ShowRetentionPolicies(database string) ([]RetentionPolicy, error) {
-	err := checkDatabaseName(database)
-	if err != nil {
-		return nil, err
-	}
-
 	var (
 		ShowRetentionPolicy = "SHOW RETENTION POLICIES"
 		rpResult            []RetentionPolicy
 	)
+	if len(database) == 0 {
+		return nil, errors.New("empty database name")
+	}
 
 	queryResult, err := c.Query(Query{Database: database, Command: ShowRetentionPolicy})
 	if err != nil {
@@ -207,15 +155,17 @@ func (c *client) ShowRetentionPolicies(database string) ([]RetentionPolicy, erro
 		return rpResult, fmt.Errorf("show retention policy err: %s", err)
 	}
 
-	rpResult = queryResult.convertRetentionPolicyList()
+	rpResult = queryResult.convertRetentionPolicy()
 	return rpResult, nil
 }
 
 // DropRetentionPolicy Drop retention policy
 func (c *client) DropRetentionPolicy(database, retentionPolicy string) error {
-	err := checkDatabaseAndPolicy(database, retentionPolicy)
-	if err != nil {
-		return err
+	if len(retentionPolicy) == 0 {
+		return errors.New("empty retention policy")
+	}
+	if len(database) == 0 {
+		return errors.New("empty database name")
 	}
 
 	cmd := fmt.Sprintf("DROP RETENTION POLICY %s ON \"%s\"", retentionPolicy, database)

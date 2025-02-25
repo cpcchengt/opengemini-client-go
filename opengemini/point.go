@@ -1,20 +1,7 @@
-// Copyright 2024 openGemini Authors
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package opengemini
 
 import (
+	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -68,24 +55,13 @@ func (p Precision) Epoch() string {
 	return ""
 }
 
-// Point represents a single point in the line protocol format.
-// A Point is composed of a measurement name, zero or more tags, one or more fields, and a timestamp.
 type Point struct {
-	// Measurement is the line protocol measurement name definition.
 	Measurement string
-	// Precision Timestamp precision, default value is PrecisionNanosecond
+	// Precision Timestamp precision ,default value is  PrecisionNanosecond
 	Precision Precision
-	// Time is the line protocol time field definition.
-	// Deprecated: Use Timestamp instead. Will be removed in 0.10.0.
-	Time time.Time
-	// Timestamp Point creation timestamp, default value is Now() in nanoseconds.
-	// If p.Time is not zero, Timestamp will be set to p.Time.UnixNano() / int64(p.Precision).
-	// If Timestamp is zero, Timestamp will be set to current time.
-	Timestamp int64
-	// Tags is the line protocol tag field definition.
-	Tags map[string]string
-	// Fields is the line protocol value field definition.
-	Fields map[string]interface{}
+	Time      time.Time
+	Tags      map[string]string
+	Fields    map[string]interface{}
 }
 
 func (p *Point) AddTag(key string, value string) {
@@ -123,6 +99,10 @@ func (enc *LineProtocolEncoder) writeString(s string, charsToEscape string) erro
 		c := s[i]
 
 		needEscape := strings.IndexByte(charsToEscape, c) != -1
+		if !needEscape && c == '\\' && i < len(s)-1 {
+			c1 := s[i+1]
+			needEscape = c1 == '\\' || strings.IndexByte(charsToEscape, c1) != -1
+		}
 
 		if needEscape {
 			if err := enc.writeByte('\\'); err != nil {
@@ -144,7 +124,7 @@ func (enc *LineProtocolEncoder) writeFieldValue(v interface{}) error {
 	switch v := v.(type) {
 	case string:
 		if err = enc.writeByte('"'); err == nil {
-			if err = enc.writeString(v, `"\`); err == nil {
+			if err = enc.writeString(v, `"`); err == nil {
 				err = enc.writeByte('"')
 			}
 		}
@@ -199,7 +179,7 @@ func (enc *LineProtocolEncoder) writeFieldValue(v interface{}) error {
 			err = enc.writeByte('F')
 		}
 	default:
-		err = ErrUnsupportedFieldValueType
+		err = errors.New("unsupported field value type")
 	}
 
 	return err
@@ -247,18 +227,12 @@ func (enc *LineProtocolEncoder) Encode(p *Point) error {
 		}
 	}
 
-	if p.Timestamp != 0 || !p.Time.IsZero() {
+	if !p.Time.IsZero() {
 		if err := enc.writeByte(' '); err != nil {
 			return err
 		}
-		if p.Timestamp != 0 {
-			if _, err := io.WriteString(enc.w, strconv.FormatInt(p.Timestamp, 10)); err != nil {
-				return err
-			}
-		} else if !p.Time.IsZero() {
-			if _, err := io.WriteString(enc.w, formatTimestamp(p.Time, p.Precision)); err != nil {
-				return err
-			}
+		if _, err := io.WriteString(enc.w, formatTimestamp(p.Time, p.Precision)); err != nil {
+			return err
 		}
 	}
 
